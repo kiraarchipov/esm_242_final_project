@@ -1,0 +1,184 @@
+---
+title: "242_project"
+author: "Matthieu Huy"
+date: "2023-11-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(nloptr)
+library(knitr)
+
+```
+
+```{r}
+
+### Model of optimally managed aquifer with parameters from example (Large Area)
+optimal_water_func <- function(choice, H_0, C_0, R, g, area, K, alpha, discount) {
+  
+  ## vectors 
+  state <- vector(mode = 'numeric', length=length(choice))
+  benefits <- vector(mode="numeric",length=length(choice))
+
+  ## initial value 
+  state[1] = H_0 # height for new mexico basin in paper 
+
+  benefits[1] = (g/K)*choice[1] - (choice[1]^2)/(2*K) - (C_0 - 0.035*state[1])*choice[1]
+  
+  
+  for(i in 2:length(choice)){
+#browser()
+    state[i] = (R/area + ((alpha - 1)/area) * choice[i]) + state[i-1]
+    benefits[i] =  (g/K)*choice[i] - (choice[i]^2)/(2*K) - (C_0 - 0.035*state[i])*choice[i] 
+    
+  }
+  t = seq(0, period)
+  pv = discount^t * benefits
+  npv = sum(pv)
+  return(-npv)
+}
+
+
+# constraint <- function(choice, H_0, C_0, R, g, K, alpha) {
+#   state <- vector(mode = 'numeric', length=length(choice))
+#   const <- vector(mode = 'numeric', length=length(choice))
+#   state[1] = H_0
+#   const[1] = (R + (alpha - 1) * choice[i]) + state[i - 1] #is this our state function and constraint?
+# }
+
+local_opts<-list("algorithm"="NLOPT_LN_COBYLA",xtol_rel=1e-15)
+options=list("algorithm"="NLOPT_LN_AUGLAG",xtol_rel=1e-15,maxeval=16000,"local_opts"=local_opts)
+
+period=10
+
+out_A = nloptr(
+  x0 = rep(1525, period),
+  eval_f = optimal_water_func,
+  lb = rep(0, period),
+  #eval_g_ineq = constraint,
+  opts = options,
+  H_0 = 3400,
+  C_0 = 125,
+  alpha = 0.37,
+  R = 173000,
+  area = 135000,
+  g = 470365,
+  K = 3259,
+  discount = 1/1.05
+)
+
+max_PVNB_A <- -out_A$objective
+Pumping_A <- out_A$solution
+
+cat("Optimal pumping:", Pumping_A, "\n")
+max_PVNB_A
+Pumping_A
+```
+
+```{r}
+### Function to check the height
+state_func <- function(choice, H_0){ 
+     state <- vector(mode = 'numeric', length=length(choice))
+     state[1] = H_0 
+     
+   for(i in 2:length(choice)){
+  
+    state[i] = (1.28148 + (0.999994593 - 1) * choice[i]) + state[i-1]
+   }
+     return(state)
+}
+
+state_func(choice = Pumping_A, H_0 = 3400)
+
+
+### Calculate nloptre optimally managed for different sized.
+### Calculate for different sized and different demand.
+### Find Area of another aquifer.
+### Model if demand function is steeper or shallower (change g and k).
+
+```
+
+```{r}
+
+### Model of optimally managed aquifer with new parameters for Tulare Basin, CA (Small Area)
+
+out_B = nloptr(
+  x0 = rep(1525, period), ### Pumping is very sensitive to this
+  eval_f = optimal_water_func,
+  lb = rep(0, period),
+  #eval_g_ineq = constraint,
+  opts = options,
+  H_0 = 3400, ### changing this has big effect on PVNB
+  C_0 = 125,
+  alpha = 0.37,
+  R = 17300, ### 1/10th recharge rate
+  area = 13500, ### 1/10th Area 
+  g = 470365,
+  K = 3259,
+  discount = 1/1.05
+)
+
+max_PVNB_B <- -out_B$objective
+Pumping_B <- out_B$solution
+
+cat("Optimal pumping:", Pumping_B, "\n")
+max_PVNB_B
+```
+
+```{r}
+### If demand is lower (g is lower)
+out_C = nloptr(
+  x0 = rep(1525, period), 
+  eval_f = optimal_water_func,
+  lb = rep(0, period),
+  #eval_g_ineq = constraint,
+  opts = options,
+  H_0 = 3400, 
+  C_0 = 125,
+  alpha = 0.37,
+  R = 173000, 
+  area = 135000, 
+  g = 50000, ## ~1/10th
+  K = 3259,
+  discount = 1/1.05
+)
+
+max_PVNB_C <- -out_C$objective
+Pumping_C <- out_C$solution
+
+cat("Optimal pumping:", Pumping_C, "\n")
+max_PVNB_C
+
+### Pumping is lower
+
+### If demand is higher (g is higher)
+out_D = nloptr(
+  x0 = rep(1525, period), 
+  eval_f = optimal_water_func,
+  lb = rep(0, period),
+  #eval_g_ineq = constraint,
+  opts = options,
+  H_0 = 3400, 
+  C_0 = 125,
+  alpha = 0.37,
+  R = 17300, 
+  area = 13500, 
+  g = 4703650, ## times 10
+  K = 3259,
+  discount = 1/1.05
+)
+
+max_PVNB_D <- -out_D$objective
+Pumping_D <- out_D$solution
+
+cat("Optimal pumping:", Pumping_D, "\n")
+max_PVNB_D
+
+### Pumping and PVNB are higher
+
+### Could do other scenarios
+```
+
